@@ -469,7 +469,7 @@ export class DataLoaderManager implements AppModule {
     if (SITE_VARIANT !== 'happy' && this.ctx.mapLayers.cables) tasks.push({ name: 'cableHealth', task: runGuarded('cableHealth', () => this.loadCableHealth()) });
     if (SITE_VARIANT !== 'happy' && this.ctx.mapLayers.flights) tasks.push({ name: 'flights', task: runGuarded('flights', () => this.loadFlightDelays()) });
     if (SITE_VARIANT !== 'happy' && CYBER_LAYER_ENABLED && this.ctx.mapLayers.cyberThreats) tasks.push({ name: 'cyberThreats', task: runGuarded('cyberThreats', () => this.loadCyberThreats()) });
-    if (SITE_VARIANT !== 'happy' && !isDesktopRuntime() && shouldLoadAny(['cii', 'strategic-risk', 'strategic-posture'])) tasks.push({ name: 'iranAttacks', task: runGuarded('iranAttacks', () => this.loadIranEvents()) });
+    if (SITE_VARIANT !== 'happy' && !isDesktopRuntime() && (this.ctx.mapLayers.iranAttacks || shouldLoadAny(['cii', 'strategic-risk', 'strategic-posture']))) tasks.push({ name: 'iranAttacks', task: runGuarded('iranAttacks', () => this.loadIranEvents()) });
     if (SITE_VARIANT !== 'happy' && (this.ctx.mapLayers.techEvents || SITE_VARIANT === 'tech')) tasks.push({ name: 'techEvents', task: runGuarded('techEvents', () => this.loadTechEvents()) });
     if (SITE_VARIANT !== 'happy' && this.ctx.mapLayers.satellites && this.ctx.map?.isGlobeMode?.()) tasks.push({ name: 'satellites', task: runGuarded('satellites', () => this.loadSatellites()) });
     if (SITE_VARIANT !== 'happy' && this.ctx.mapLayers.webcams) tasks.push({ name: 'webcams', task: runGuarded('webcams', () => this.loadWebcams()) });

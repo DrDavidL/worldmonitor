@@ -97,7 +97,7 @@ export class App {
   }
 
   private shouldRefreshFirms(): boolean {
-    return this.isPanelNearViewport('satellite-fires') || this.state.mapLayers.natural;
+    return this.isPanelNearViewport('satellite-fires');
   }
 
   private shouldRefreshCorrelation(): boolean {
