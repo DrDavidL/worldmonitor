@@ -38,9 +38,9 @@ async function fetchFromOSSInsight(language: string, period: string, pageSize: n
   );
   if (!resp.ok) return null;
   const json = await resp.json() as any;
-  const data = json?.data;
-  if (!Array.isArray(data)) return null;
-  return data.slice(0, pageSize).map((r: any): GithubRepo => ({
+  const rows = json?.data?.rows;
+  if (!Array.isArray(rows)) return null;
+  return rows.slice(0, pageSize).map((r: any): GithubRepo => ({
     fullName: r.repo_name || '', description: r.description || '',
     language: r.primary_language || language, stars: r.stars || 0,
     starsToday: 0, forks: r.forks || 0,
@@ -48,8 +48,11 @@ async function fetchFromOSSInsight(language: string, period: string, pageSize: n
   }));
 }
 
-async function fetchFromGitHubSearch(language: string, pageSize: number): Promise<GithubRepo[] | null> {
-  const since = new Date(Date.now() - 7 * 86400_000).toISOString().slice(0, 10);
+const GH_SEARCH_DAYS: Record<string, number> = { daily: 1, weekly: 7, monthly: 30 };
+
+async function fetchFromGitHubSearch(language: string, period: string, pageSize: number): Promise<GithubRepo[] | null> {
+  const days = GH_SEARCH_DAYS[period] || 7;
+  const since = new Date(Date.now() - days * 86400_000).toISOString().slice(0, 10);
   const resp = await fetch(
     `https://api.github.com/search/repositories?q=language:${language}+created:>${since}&sort=stars&order=desc&per_page=${pageSize}`,
     { headers: { Accept: 'application/vnd.github+json', 'User-Agent': CHROME_UA }, signal: AbortSignal.timeout(10_000) },
@@ -76,7 +79,7 @@ async function fetchTrendingRepos(req: ListTrendingReposRequest): Promise<Github
   } catch { /* fall through */ }
 
   try {
-    const repos = await fetchFromGitHubSearch(language, pageSize);
+    const repos = await fetchFromGitHubSearch(language, period, pageSize);
     if (repos && repos.length > 0) return repos;
   } catch { /* fall through */ }
 

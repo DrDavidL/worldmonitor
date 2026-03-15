@@ -240,9 +240,9 @@ async function fetchTrendingFromOSSInsight(lang) {
   );
   if (!resp.ok) return null;
   const json = await resp.json();
-  const data = json?.data;
-  if (!Array.isArray(data)) return null;
-  return data.slice(0, 50).map(r => ({
+  const rows = json?.data?.rows;
+  if (!Array.isArray(rows)) return null;
+  return rows.slice(0, 50).map(r => ({
     fullName: r.repo_name || '', description: r.description || '',
     language: r.primary_language || lang, stars: r.stars || 0,
     starsToday: 0, forks: r.forks || 0,
