@@ -84,8 +84,8 @@ describe('Customs revenue panel (WTO gate fix)', () => {
     assert.match(panelSrc, /if \(!wtoAvailable && this\.activeTab !== 'revenue'\)/);
   });
 
-  it('shows US Treasury as source for revenue tab', () => {
-    assert.match(panelSrc, /activeTab === 'revenue' \? 'US Treasury'/);
+  it('shows localized Treasury source for revenue tab', () => {
+    assert.match(panelSrc, /activeTab === 'revenue' \? t\('components\.tradePolicy\.sourceTreasury'\)/);
   });
 
   it('computes FYTD comparison with same month count from prior fiscal year', () => {
