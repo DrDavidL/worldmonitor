@@ -30,11 +30,13 @@ const SCAN_ROOTS = [
   'tests',
   'e2e',
   '.github',
+  '.husky',
 ];
 
 const INCLUDED_EXTENSIONS = new Set([
   '.ts', '.tsx', '.js', '.jsx', '.mjs', '.cjs',
   '.json', '.yml', '.yaml', '.sh',
+  '',  // extensionless scripts (e.g. .husky/pre-commit, .husky/pre-push)
 ]);
 
 const EXCLUDED_PREFIXES = [
@@ -57,16 +59,16 @@ function isVariationSelectorSupplement(cp) {
   return cp >= 0xE0100 && cp <= 0xE01EF;
 }
 
-function isVariationSelectorSuspicious(cp, prevCp) {
-  // FE0F is commonly used with emoji; only flag if chained after ASCII/control.
-  if (cp === 0xFE0F) return prevCp === undefined || prevCp <= 0x7F;
-  // FE00..FE0E are rare in app source and suspicious for steganography.
+function isVariationSelectorSuspicious(cp) {
+  // FE0F (emoji presentation selector) is legitimately used after emoji base
+  // characters (including ASCII keycap sequences like #️⃣) — skip to avoid
+  // false positives. FE00..FE0E (text/emoji selectors) are rare in source and
+  // suspicious for steganography.
   return cp >= 0xFE00 && cp <= 0xFE0E;
 }
 
-function isPrivateUseArea(cp) {
-  return cp >= 0xE000 && cp <= 0xF8FF;
-}
+// PUA (E000–F8FF) is intentionally excluded: it doesn't affect parser
+// semantics and is legitimately used by icon fonts in string literals.
 
 function getExtension(path) {
   const idx = path.lastIndexOf('.');
@@ -136,12 +138,11 @@ function formatCodePoint(cp) {
   return `U+${cp.toString(16).toUpperCase().padStart(cp > 0xFFFF ? 6 : 4, '0')}`;
 }
 
-function classify(cp, prevCp) {
+function classify(cp) {
   if (isBidiControl(cp)) return 'bidi-control';
   if (ZERO_WIDTH.has(cp)) return 'zero-width';
   if (isVariationSelectorSupplement(cp)) return 'variation-selector-supplement';
-  if (isVariationSelectorSuspicious(cp, prevCp)) return 'variation-selector';
-  if (isPrivateUseArea(cp)) return 'private-use-area';
+  if (isVariationSelectorSuspicious(cp)) return 'variation-selector';
   return null;
 }
 
@@ -158,11 +159,10 @@ function scanFile(path) {
   const lines = text.split('\n');
   let line = 1;
   let col = 1;
-  let prevCp;
 
   for (const ch of text) {
     const cp = ch.codePointAt(0);
-    const kind = classify(cp, prevCp);
+    const kind = classify(cp);
     if (kind) {
       const lineText = lines[line - 1] ?? '';
       findings.push({
@@ -179,9 +179,10 @@ function scanFile(path) {
       line += 1;
       col = 1;
     } else {
-      col += 1;
+      // Astral-plane characters (cp > 0xFFFF) occupy two UTF-16 code units.
+      // Increment by 2 so reported columns match editor column positions.
+      col += cp > 0xFFFF ? 2 : 1;
     }
-    prevCp = cp;
   }
 
   return findings;
