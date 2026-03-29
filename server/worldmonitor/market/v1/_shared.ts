@@ -2,31 +2,11 @@
  * Shared helpers, types, and constants for the market service handler RPCs.
  */
 import { CHROME_UA, finnhubGate, yahooGate } from '../../../_shared/constants';
+import { getRelayBaseUrl, getRelayHeaders } from '../../../_shared/relay';
+export { getRelayBaseUrl, getRelayHeaders };
 import cryptoConfig from '../../../../shared/crypto.json';
 import stablecoinConfig from '../../../../shared/stablecoins.json';
 export { parseStringArray } from '../../../_shared/parse-string-array';
-
-// ========================================================================
-// Relay helpers (Railway proxy for Yahoo when Vercel IPs are rate-limited)
-// ========================================================================
-
-function getRelayBaseUrl(): string | null {
-  const relayUrl = process.env.WS_RELAY_URL;
-  if (!relayUrl) return null;
-  return relayUrl
-    .replace(/^ws(s?):\/\//, 'http$1://')
-    .replace(/\/$/, '');
-}
-
-function getRelayHeaders(): Record<string, string> {
-  const headers: Record<string, string> = { 'User-Agent': CHROME_UA };
-  const relaySecret = process.env.RELAY_SHARED_SECRET;
-  if (relaySecret) {
-    const relayHeader = (process.env.RELAY_AUTH_HEADER || 'x-relay-key').toLowerCase();
-    headers[relayHeader] = relaySecret;
-  }
-  return headers;
-}
 
 // ========================================================================
 // Constants
@@ -58,10 +38,12 @@ export async function fetchYahooQuotesBatch(
   return { results, rateLimited: rateLimitHits > symbols.length / 2 };
 }
 
-// Yahoo-only symbols: indices and futures not on Finnhub free tier
+// Yahoo-only symbols: indices, futures, and forex pairs not on Finnhub free tier
 export const YAHOO_ONLY_SYMBOLS = new Set([
   '^GSPC', '^DJI', '^IXIC', '^VIX',
   'GC=F', 'CL=F', 'NG=F', 'SI=F', 'HG=F',
+  'EURUSD=X', 'GBPUSD=X', 'AUDUSD=X',
+  'USDJPY=X', 'USDCNY=X', 'USDINR=X', 'USDCHF=X', 'USDCAD=X', 'USDTRY=X',
 ]);
 
 export const CRYPTO_META: Record<string, { name: string; symbol: string }> = cryptoConfig.meta;

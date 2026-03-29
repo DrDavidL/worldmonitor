@@ -12,12 +12,16 @@ import type {
 
 import { getCachedJson } from '../../../_shared/redis';
 import { toUniqueSortedLimited } from '../../../_shared/normalize-list';
+import { applyFredObservationLimit, fredSeedKey, normalizeFredLimit } from './_fred-shared';
 
-const FRED_KEY_PREFIX = 'economic:fred:v1';
-
-const ALLOWED_SERIES = new Set([
+const ALLOWED_SERIES = new Set<string>([
   'WALCL', 'FEDFUNDS', 'T10Y2Y', 'UNRATE', 'CPIAUCSL', 'DGS10', 'VIXCLS',
-  'GDP', 'M2SL', 'DCOILWTICO',
+  'GDP', 'M2SL', 'DCOILWTICO', 'BAMLH0A0HYM2', 'ICSA', 'MORTGAGE30US',
+  'GSCPI', // NY Fed Global Supply Chain Pressure Index (seeded by ais-relay, not FRED API)
+  'T10Y3M', 'STLFSI4', // Economic Stress Index components (seeded by seed-economy.mjs)
+  'DGS1MO', 'DGS3MO', 'DGS6MO', 'DGS1', 'DGS2', 'DGS5', 'DGS30', // yield curve tenors
+  'BAMLC0A0CM', 'SOFR', // IG OAS spread + Secured Overnight Financing Rate (seeded by seed-economy.mjs)
+  'ESTR', 'EURIBOR3M', 'EURIBOR6M', 'EURIBOR1Y', // ECB short rates (seeded by seed-ecb-short-rates.mjs)
 ]);
 
 export async function getFredSeriesBatch(
@@ -28,11 +32,11 @@ export async function getFredSeriesBatch(
     const normalized = req.seriesIds
       .map((id) => id.trim().toUpperCase())
       .filter((id) => ALLOWED_SERIES.has(id));
-    const limitedList = toUniqueSortedLimited(normalized, 10);
-    const limit = req.limit > 0 ? Math.min(req.limit, 1000) : 120;
+    const limitedList = toUniqueSortedLimited(normalized, 20);
+    const limit = normalizeFredLimit(req.limit);
 
     const settled = await Promise.allSettled(
-      limitedList.map((id) => getCachedJson(`${FRED_KEY_PREFIX}:${id}:0`, true)),
+      limitedList.map((id) => getCachedJson(fredSeedKey(id), true)),
     );
 
     const results: Record<string, FredSeries> = {};
@@ -41,14 +45,7 @@ export async function getFredSeriesBatch(
       const entry = settled[i];
       if (entry?.status !== 'fulfilled' || !entry.value) continue;
       const cached = entry.value as { series?: FredSeries };
-      if (cached?.series) {
-        const series = cached.series;
-        if (limit > 0 && series.observations.length > limit) {
-          results[id] = { ...series, observations: series.observations.slice(-limit) };
-        } else {
-          results[id] = series;
-        }
-      }
+      if (cached?.series) results[id] = applyFredObservationLimit(cached.series, limit);
     }
 
     return {

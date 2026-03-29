@@ -30,11 +30,13 @@ const SCAN_ROOTS = [
   'tests',
   'e2e',
   '.github',
+  '.husky',
 ];
 
 const INCLUDED_EXTENSIONS = new Set([
   '.ts', '.tsx', '.js', '.jsx', '.mjs', '.cjs',
   '.json', '.yml', '.yaml', '.sh',
+  '',  // extensionless scripts (e.g. .husky/pre-commit, .husky/pre-push)
 ]);
 
 const EXCLUDED_PREFIXES = [
@@ -45,6 +47,8 @@ const EXCLUDED_PREFIXES = [
   'docs/',
   'blog-site/',
   'public/blog/',
+  'scripts/data/',
+  'scripts/node_modules/',
 ];
 
 const ZERO_WIDTH = new Set([0x200B, 0x200C, 0x200D, 0x2060, 0xFEFF]);
@@ -179,7 +183,9 @@ function scanFile(path) {
       line += 1;
       col = 1;
     } else {
-      col += 1;
+      // Astral-plane characters (cp > 0xFFFF) occupy two UTF-16 code units.
+      // Increment by 2 so reported columns match editor column positions.
+      col += cp > 0xFFFF ? 2 : 1;
     }
     prevCp = cp;
   }

@@ -70,7 +70,10 @@ async function fetchAcledToken() {
 
 async function fetchAcledEvents() {
   const token = await fetchAcledToken();
-  if (!token) throw new Error('Missing ACLED credentials (ACLED_EMAIL+ACLED_PASSWORD or ACLED_ACCESS_TOKEN)');
+  if (!token) {
+    console.log('  ACLED: no credentials configured, skipping');
+    return null;
+  }
 
   const now = Date.now();
   const startDate = new Date(now - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
@@ -203,7 +206,7 @@ async function fetchPizzintStatus() {
   const open = locations.filter(l => !l.isClosedNow);
   const spikes = locations.filter(l => l.isSpike).length;
   const avgPop = open.length > 0 ? open.reduce((s, l) => s + l.currentPopularity, 0) / open.length : 0;
-  let adjusted = Math.min(100, avgPop + spikes * 10);
+  const adjusted = Math.min(100, avgPop + spikes * 10);
   let defconLevel = 5, defconLabel = 'Normal Activity';
   if (adjusted >= 85) { defconLevel = 1; defconLabel = 'Maximum Activity'; }
   else if (adjusted >= 70) { defconLevel = 2; defconLabel = 'High Activity'; }

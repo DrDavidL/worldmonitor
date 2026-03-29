@@ -7,6 +7,7 @@ import { fileURLToPath } from 'node:url';
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const root = resolve(__dirname, '..');
 const apiDir = join(root, 'api');
+const apiOauthDir = join(root, 'api', 'oauth');
 const sharedDir = join(root, 'shared');
 const scriptsSharedDir = join(root, 'scripts', 'shared');
 
@@ -15,10 +16,23 @@ const edgeFunctions = readdirSync(apiDir)
   .filter((f) => f.endsWith('.js') && !f.startsWith('_'))
   .map((f) => ({ name: f, path: join(apiDir, f) }));
 
-// ALL .js files in api/ (including helpers) — used for node: built-in checks
-const allApiFiles = readdirSync(apiDir)
-  .filter((f) => f.endsWith('.js'))
-  .map((f) => ({ name: f, path: join(apiDir, f) }));
+// Also include api/oauth/ subdir edge functions
+const oauthEdgeFunctions = readdirSync(apiOauthDir)
+  .filter((f) => f.endsWith('.js') && !f.startsWith('_'))
+  .map((f) => ({ name: `oauth/${f}`, path: join(apiOauthDir, f) }));
+
+const allEdgeFunctions = [...edgeFunctions, ...oauthEdgeFunctions];
+
+// ALL .js AND .ts files in api/ root — used for node: built-in checks.
+// Note: .ts edge functions (e.g. widget-agent.ts) are intentionally excluded from the
+// module-isolation describe below because Vercel bundles them at build time, so
+// imports from '../server/' are valid. The node: built-in check still applies.
+const allApiFiles = [
+  ...readdirSync(apiDir)
+    .filter((f) => (f.endsWith('.js') || f.endsWith('.ts')) && !f.startsWith('_'))
+    .map((f) => ({ name: f, path: join(apiDir, f) })),
+  ...oauthEdgeFunctions,
+];
 
 describe('scripts/shared/ stays in sync with shared/', () => {
   const sharedFiles = readdirSync(sharedDir).filter((f) => f.endsWith('.json') || f.endsWith('.cjs'));
@@ -74,11 +88,13 @@ describe('Legacy api/*.js endpoint allowlist', () => {
     'polymarket.js',
     'register-interest.js',
     'reverse-geocode.js',
+    'mcp-proxy.js',
     'rss-proxy.js',
     'satellites.js',
     'seed-health.js',
     'story.js',
     'telegram-feed.js',
+    'sanctions-entity-search.js',
     'version.js',
   ]);
 
@@ -108,8 +124,76 @@ describe('Legacy api/*.js endpoint allowlist', () => {
   });
 });
 
+describe('reverse-geocode Redis write', () => {
+  const geocodePath = join(apiDir, 'reverse-geocode.js');
+
+  it('uses ctx.waitUntil for Redis write (non-blocking, survives isolate teardown)', () => {
+    const src = readFileSync(geocodePath, 'utf-8');
+    assert.ok(
+      src.includes('ctx.waitUntil('),
+      'reverse-geocode.js: Redis cache write must use ctx.waitUntil() so the response is not blocked by the write',
+    );
+    assert.ok(
+      !src.includes('await fetch(redisUrl'),
+      'reverse-geocode.js: Redis write must not be awaited before returning the response',
+    );
+  });
+
+  it('bounds the Redis write with AbortSignal.timeout', () => {
+    const src = readFileSync(geocodePath, 'utf-8');
+    assert.ok(
+      src.includes('AbortSignal.timeout'),
+      'reverse-geocode.js: Redis write must have AbortSignal.timeout to bound slow writes',
+    );
+  });
+});
+
+describe('oauth/authorize.js consent page safety', () => {
+  const authorizePath = join(apiOauthDir, 'authorize.js');
+
+  it('uses _js POST body field (not X-Requested-With header) for XHR detection — avoids CORS preflight', () => {
+    const src = readFileSync(authorizePath, 'utf-8');
+    assert.ok(
+      !src.includes("'X-Requested-With'"),
+      'authorize.js: must not send X-Requested-With header in fetch — it triggers CORS preflight which fails in WebView. Use _js POST body field instead.',
+    );
+    assert.ok(
+      src.includes("params.get('_js') === '1'"),
+      "authorize.js: must detect JS path via params.get('_js') === '1' from POST body.",
+    );
+  });
+
+  it('allows null origin for WebView compatibility', () => {
+    const src = readFileSync(authorizePath, 'utf-8');
+    assert.ok(
+      src.includes("origin !== 'null'"),
+      "authorize.js: origin check must allow the string 'null' (WebView opaque origin). Without this, Connectors UI gets 403.",
+    );
+  });
+
+  it('consent form includes _js hidden field set by inline script before FormData', () => {
+    const src = readFileSync(authorizePath, 'utf-8');
+    assert.ok(
+      src.includes('name="_js"'),
+      'authorize.js: consent form must include <input name="_js"> for JS-path detection.',
+    );
+    assert.ok(
+      src.includes("jf.value='1'"),
+      "authorize.js: inline script must set jf.value='1' before building FormData.",
+    );
+  });
+
+  it('OPTIONS response includes Access-Control-Allow-Headers', () => {
+    const src = readFileSync(authorizePath, 'utf-8');
+    assert.ok(
+      src.includes('Access-Control-Allow-Headers'),
+      'authorize.js: OPTIONS response must include Access-Control-Allow-Headers.',
+    );
+  });
+});
+
 describe('Edge Function module isolation', () => {
-  for (const { name, path } of edgeFunctions) {
+  for (const { name, path } of allEdgeFunctions) {
     it(`${name} does not import from ../server/ (Edge Functions cannot resolve cross-directory TS)`, () => {
       const src = readFileSync(path, 'utf-8');
       assert.ok(
