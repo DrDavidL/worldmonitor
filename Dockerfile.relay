@@ -16,7 +16,7 @@ WORKDIR /app
 
 # Install scripts/ runtime dependencies (telegram, ws, fast-xml-parser, etc.)
 COPY scripts/package.json scripts/package-lock.json ./scripts/
-RUN npm ci --prefix scripts --omit=dev
+RUN npm ci --prefix scripts --omit=dev --ignore-scripts
 
 # Relay script and shared CJS helpers
 COPY scripts/ais-relay.cjs ./scripts/ais-relay.cjs
