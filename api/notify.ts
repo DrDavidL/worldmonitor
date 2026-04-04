@@ -41,7 +41,7 @@ export default async function handler(req: Request): Promise<Response> {
     return jsonResponse({ error: 'UNAUTHENTICATED' }, 401, cors);
   }
 
-  let body: { eventType?: unknown; payload?: unknown; severity?: unknown };
+  let body: { eventType?: unknown; payload?: unknown; severity?: unknown; variant?: unknown };
   try {
     body = await req.json();
   } catch {
@@ -65,18 +65,20 @@ export default async function handler(req: Request): Promise<Response> {
 
   const { eventType, payload } = body;
   const severity = typeof body.severity === 'string' ? body.severity : 'high';
+  const variant = typeof body.variant === 'string' ? body.variant : undefined;
 
   const msg = JSON.stringify({
     eventType,
     payload,
     severity,
+    variant,
     publishedAt: Date.now(),
     userId: session.userId,
   });
 
   const res = await fetch(
-    `${upstashUrl}/publish/wm:events:notify/${encodeURIComponent(msg)}`,
-    { method: 'POST', headers: { Authorization: `Bearer ${upstashToken}` } },
+    `${upstashUrl}/lpush/wm:events:queue/${encodeURIComponent(msg)}`,
+    { method: 'POST', headers: { Authorization: `Bearer ${upstashToken}`, 'User-Agent': 'worldmonitor-edge/1.0' } },
   );
 
   if (!res.ok) {
